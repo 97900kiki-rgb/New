@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HemoLab — Open DataSet 기반 혈액 분석 WebApp</title>
+<meta name="description" content="공개 의료 데이터셋과 혈액 검사 데이터를 브라우저에서 바로 분석·시각화하는 정적 웹 애플리케이션" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
+<link rel="stylesheet" href="css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main-content">본문으로 건너뛰기</a>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"><i class="fa-solid fa-droplet"></i></span>
+    <span class="brand-text">
+      <strong>HemoLab</strong>
+      <small>Open DataSet Blood Analytics</small>
+    </span>
+  </div>
+  <nav class="main-nav" aria-label="주요 섹션">
+    <button class="nav-btn is-active" data-view="dashboard" type="button"><i class="fa-solid fa-chart-pie"></i><span>대시보드</span></button>
+    <button class="nav-btn" data-view="data" type="button"><i class="fa-solid fa-file-arrow-up"></i><span>데이터</span></button>
+    <button class="nav-btn" data-view="samples" type="button"><i class="fa-solid fa-table-list"></i><span>검체 목록</span></button>
+    <button class="nav-btn" data-view="outliers" type="button"><i class="fa-solid fa-triangle-exclamation"></i><span>이상치 탐지</span></button>
+    <button class="nav-btn" data-view="saved" type="button"><i class="fa-solid fa-database"></i><span>저장된 기록</span></button>
+    <button class="nav-btn" data-view="about" type="button"><i class="fa-solid fa-circle-info"></i><span>프로젝트 소개</span></button>
+  </nav>
+</header>
+
+<main id="main-content">
+
+  <!-- ===================== 대시보드 ===================== -->
+  <section id="view-dashboard" class="view is-active" aria-labelledby="dashboard-title">
+    <div class="view-head">
+      <div>
+        <h1 id="dashboard-title">실시간 분석 대시보드</h1>
+        <p class="view-sub">업로드한 혈액 검사 데이터를 즉시 집계·시각화합니다. 모든 계산은 브라우저 안에서만 이루어집니다.</p>
+      </div>
+      <div class="head-actions">
+        <span class="chip" id="dataset-chip"><i class="fa-solid fa-circle-nodes"></i> <span>데이터 없음</span></span>
+      </div>
+    </div>
+
+    <div class="kpi-grid" id="kpi-grid" aria-live="polite">
+      <article class="kpi-card"><span class="kpi-icon kpi-blue"><i class="fa-solid fa-vials"></i></span><p class="kpi-label">분석 검체 수</p><p class="kpi-value" id="kpi-samples">–</p><p class="kpi-hint" id="kpi-samples-hint">대기 중</p></article>
+      <article class="kpi-card"><span class="kpi-icon kpi-cyan"><i class="fa-solid fa-heart-pulse"></i></span><p class="kpi-label">헤모글로빈 평균</p><p class="kpi-value" id="kpi-hgb">–</p><p class="kpi-hint" id="kpi-hgb-hint">g/dL</p></article>
+      <article class="kpi-card"><span class="kpi-icon kpi-violet"><i class="fa-solid fa-shield-virus"></i></span><p class="kpi-label">백혈구(WBC) 평균</p><p class="kpi-value" id="kpi-wbc">–</p><p class="kpi-hint" id="kpi-wbc-hint">10³/µL</p></article>
+      <article class="kpi-card"><span class="kpi-icon kpi-amber"><i class="fa-solid fa-circle-dot"></i></span><p class="kpi-label">혈소판 평균</p><p class="kpi-value" id="kpi-plt">–</p><p class="kpi-hint" id="kpi-plt-hint">10³/µL</p></article>
+      <article class="kpi-card"><span class="kpi-icon kpi-rose"><i class="fa-solid fa-triangle-exclamation"></i></span><p class="kpi-label">이상치 비율</p><p class="kpi-value" id="kpi-outlier-rate">–</p><p class="kpi-hint" id="kpi-outlier-hint">이상치 0건</p></article>
+    </div>
+
+    <div class="grid grid-2">
+      <article class="panel">
+        <header class="panel-head">
+          <h2>주요 지표 분포</h2>
+          <p>정상 범위를 벗어난 검체는 강조 표시됩니다.</p>
+        </header>
+        <div class="chart-box"><canvas id="chart-distribution" aria-label="주요 혈액 지표 분포 차트"></canvas></div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head">
+          <h2>지표별 정상/이상 비율</h2>
+          <p>참고 범위(reference range) 기준 집계입니다.</p>
+        </header>
+        <div class="chart-box"><canvas id="chart-status" aria-label="지표별 정상 이상 비율 차트"></canvas></div>
+      </article>
+    </div>
+
+    <div class="grid grid-2">
+      <article class="panel">
+        <header class="panel-head">
+          <h2>헤모글로빈 · 백혈구 산점도</h2>
+          <p>점의 색은 이상치 여부, 클릭하면 검체 상세가 열립니다.</p>
+        </header>
+        <div class="chart-box"><canvas id="chart-scatter" aria-label="헤모글로빈과 백혈구 산점도"></canvas></div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head">
+          <h2>이상치 항목 Top 8</h2>
+          <p>가장 많이 벗어난 검사 항목 순위입니다.</p>
+        </header>
+        <div class="chart-box"><canvas id="chart-top-outliers" aria-label="이상치 항목 순위 차트"></canvas></div>
+      </article>
+    </div>
+
+    <div class="grid grid-2">
+      <article class="panel">
+        <header class="panel-head">
+          <h2>지표별 기술 통계</h2>
+          <p>평균 · 표준편차 · 최소/최대 · 참고 범위 비교</p>
+        </header>
+        <div class="table-scroll">
+          <table class="data-table compact-table" id="stats-table">
+            <thead>
+              <tr><th scope="col">지표</th><th scope="col">평균</th><th scope="col">표준편차</th><th scope="col">중앙값</th><th scope="col">최소</th><th scope="col">최대</th><th scope="col">참고 범위</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head">
+          <h2>참고 범위 밖 검체 미리보기</h2>
+          <p>이상치가 감지된 검체를 우선순위대로 보여줍니다.</p>
+        </header>
+        <div id="dashboard-outlier-list" class="outlier-mini-list"></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ===================== 데이터 ===================== -->
+  <section id="view-data" class="view" aria-labelledby="data-title">
+    <div class="view-head">
+      <div>
+        <h1 id="data-title">데이터 업로드 및 분석</h1>
+        <p class="view-sub">CSV · Excel · JSON 파일을 드래그해 놓으면 전처리(정규화) 후 자동으로 분석이 시작됩니다.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-2 grid-wide-left">
+      <article class="panel">
+        <header class="panel-head">
+          <h2>파일 업로드</h2>
+          <p>컬럼명은 자동 인식되며, 헤더는 첫 번째 행에 있어야 합니다.</p>
+        </header>
+        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="분석할 파일 선택 또는 끌어다 놓기">
+          <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+          <p class="dropzone-title">파일을 여기로 끌어다 놓으세요</p>
+          <p class="dropzone-sub">또는 클릭하여 선택 (CSV, XLSX, XLS, JSON · 최대 10MB)</p>
+          <input type="file" id="file-input" accept=".csv,.xlsx,.xls,.json,.txt" hidden />
+        </div>
+        <div id="upload-feedback" class="feedback" role="status" aria-live="polite"></div>
+        <div class="button-row">
+          <button class="btn btn-primary" id="btn-load-sample" type="button"><i class="fa-solid fa-file-csv"></i> 샘플 CSV 다운로드</button>
+          <button class="btn" id="btn-generate-data" type="button"><i class="fa-solid fa-flask-vial"></i> 시뮬레이션 데이터 생성</button>
+          <button class="btn" id="btn-download-template" type="button"><i class="fa-solid fa-download"></i> 업로드용 템플릿</button>
+        </div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head">
+          <h2>컬럼 매핑</h2>
+          <p>인식되지 않은 컬럼은 수동으로 연결할 수 있습니다 (선택 사항).</p>
+        </header>
+        <form id="mapping-form" class="mapping-form" autocomplete="off">
+          <div class="mapping-grid" id="mapping-grid">
+            <p class="empty-note">데이터를 업로드하면 컬럼 매핑 도구가 표시됩니다.</p>
+          </div>
+          <div class="button-row">
+            <button class="btn btn-primary" id="btn-apply-mapping" type="button"><i class="fa-solid fa-check"></i> 매핑 적용 후 재분석</button>
+            <button class="btn" id="btn-reset-data" type="button"><i class="fa-solid fa-rotate-left"></i> 데이터 초기화</button>
+          </div>
+        </form>
+      </article>
+    </div>
+
+    <div class="grid grid-2">
+      <article class="panel">
+        <header class="panel-head"><h2>데이터 미리보기</h2><p>전처리 이후 상위 15개 행입니다.</p></header>
+        <div class="table-scroll"><table class="data-table" id="preview-table"><thead></thead><tbody></tbody></table></div>
+      </article>
+      <article class="panel">
+        <header class="panel-head"><h2>전처리 로그</h2><p>파싱 · 정규화 과정에서 처리된 내용입니다.</p></header>
+        <ul class="log-list" id="preprocess-log"></ul>
+      </article>
+    </div>
+  </section>
+
+  <!-- ===================== 검체 목록 ===================== -->
+  <section id="view-samples" class="view" aria-labelledby="samples-title">
+    <div class="view-head">
+      <div>
+        <h1 id="samples-title">검체 목록</h1>
+        <p class="view-sub">정렬 · 검색 · 필터로 원하는 검체를 빠르게 찾고, 행을 클릭해 상세를 확인하세요.</p>
+      </div>
+    </div>
+
+    <article class="panel">
+      <div class="toolbar">
+        <label class="field">
+          <span>검색</span>
+          <input type="search" id="sample-search" placeholder="검체 ID, 그룹, 성별 검색" />
+        </label>
+        <label class="field">
+          <span>그룹</span>
+          <select id="filter-group"><option value="">전체</option></select>
+        </label>
+        <label class="field">
+          <span>상태</span>
+          <select id="filter-status">
+            <option value="">전체</option>
+            <option value="normal">정상 범위</option>
+            <option value="abnormal">이상치 포함</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>정렬</span>
+          <select id="sort-samples">
+            <option value="id-asc">검체 ID</option>
+            <option value="outlier-desc">이상치 많은 순</option>
+            <option value="hgb-asc">헤모글로빈 낮은 순</option>
+            <option value="hgb-desc">헤모글로빈 높은 순</option>
+            <option value="wbc-desc">백혈구 높은 순</option>
+            <option value="plt-asc">혈소판 낮은 순</option>
+          </select>
+        </label>
+        <span class="toolbar-meta" id="samples-count">0개 검체</span>
+      </div>
+
+      <div class="table-scroll table-tall">
+        <table class="data-table" id="samples-table">
+          <thead><tr id="samples-head-row"></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <nav class="pagination" id="samples-pagination" aria-label="검체 목록 페이지"></nav>
+    </article>
+  </section>
+
+  <!-- ===================== 이상치 탐지 ===================== -->
+  <section id="view-outliers" class="view" aria-labelledby="outliers-title">
+    <div class="view-head">
+      <div>
+        <h1 id="outliers-title">통계 분석 및 이상치 탐지</h1>
+        <p class="view-sub">참고 범위 이탈(Z-score) · IQR · 다변량 거리(Mahalanobis) 세 가지 기법으로 비정상 수치를 감지합니다.</p>
+      </div>
+      <div class="head-actions">
+        <label class="field field-inline">
+          <span>Z-score 임계값</span>
+          <input type="number" id="z-threshold" value="2.5" min="1" max="5" step="0.1" />
+        </label>
+        <button class="btn btn-primary" id="btn-rerun-detection" type="button"><i class="fa-solid fa-magnifying-glass-chart"></i> 재탐지</button>
+      </div>
+    </div>
+
+    <div class="grid grid-3">
+      <article class="mini-stat"><p class="mini-label">총 이상치</p><p class="mini-value" id="outlier-total">–</p><p class="mini-hint">참고 범위 이탈 건수</p></article>
+      <article class="mini-stat"><p class="mini-label">이상 검체</p><p class="mini-value" id="outlier-samples">–</p><p class="mini-hint">1건 이상 이상치 보유</p></article>
+      <article class="mini-stat"><p class="mini-label">가장 취약한 지표</p><p class="mini-value" id="outlier-top-metric">–</p><p class="mini-hint">이탈 빈도 1위</p></article>
+    </div>
+
+    <article class="panel">
+      <header class="panel-head">
+        <h2>이상치 상세 목록</h2>
+        <p>심각도(표준화 편차) 순으로 정렬됩니다.</p>
+      </header>
+      <div class="table-scroll table-tall">
+        <table class="data-table" id="outlier-table">
+          <thead>
+            <tr>
+              <th scope="col">검체 ID</th>
+              <th scope="col">지표</th>
+              <th scope="col">측정값</th>
+              <th scope="col">참고 범위</th>
+              <th scope="col">표준화 편차</th>
+              <th scope="col">심각도</th>
+              <th scope="col">탐지 기법</th>
+              <th scope="col">상세</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </article>
+
+    <div class="grid grid-2">
+      <article class="panel">
+        <header class="panel-head"><h2>지표별 이상치 개수</h2><p>어떤 항목이 자주 벗어나는지 확인합니다.</p></header>
+        <div class="chart-box"><canvas id="chart-outlier-metric" aria-label="지표별 이상치 개수 차트"></canvas></div>
+      </article>
+      <article class="panel">
+        <header class="panel-head"><h2>검체별 이상치 개수</h2><p>상위 15개 검체입니다.</p></header>
+        <div class="chart-box"><canvas id="chart-outlier-sample" aria-label="검체별 이상치 개수 차트"></canvas></div>
+      </article>
+    </div>
+
+    <article class="panel">
+      <header class="panel-head"><h2>다변량 이상 검체</h2><p>여러 지표가 동시에 치우친 검체는 단일 항목 검사로는 놓치기 쉽습니다.</p></header>
+      <div id="multivariate-note" class="disclaimer">데이터를 불러오면 표시됩니다.</div>
+    </article>
+  </section>
+
+  <!-- ===================== 저장된 기록 ===================== -->
+  <section id="view-saved" class="view" aria-labelledby="saved-title">
+    <div class="view-head">
+      <div>
+        <h1 id="saved-title">저장된 분석 기록</h1>
+        <p class="view-sub">분석한 데이터셋을 라벨과 함께 저장해 두고 언제든 다시 불러올 수 있습니다.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-2 grid-wide-left">
+      <article class="panel">
+        <header class="panel-head"><h2>현재 데이터셋 저장</h2><p>요약 지표와 상위 200개 검체가 함께 보관됩니다.</p></header>
+        <form id="save-form" class="stack-form">
+          <label class="field"><span>분석 이름 *</span><input type="text" id="save-label" placeholder="예: 2026년 1분기 기본 검진" required /></label>
+          <label class="field"><span>데이터 출처</span><input type="text" id="save-source" placeholder="예: UCI ML Repository / Kaggle / 자체 수집" /></label>
+          <label class="field"><span>메모</span><textarea id="save-note" rows="3" placeholder="분석 목적, 특이사항 등을 기록하세요."></textarea></label>
+          <div class="button-row">
+            <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> 현재 데이터셋 저장</button>
+            <button class="btn" type="button" id="btn-refresh-saved"><i class="fa-solid fa-rotate"></i> 목록 새로고침</button>
+          </div>
+          <div class="feedback" id="save-feedback" role="status" aria-live="polite"></div>
+        </form>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head"><h2>저장된 목록</h2><p>불러오기를 누르면 대시보드가 즉시 갱신됩니다.</p></header>
+        <div id="saved-list" class="saved-list"></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ===================== 프로젝트 소개 ===================== -->
+  <section id="view-about" class="view" aria-labelledby="about-title">
+    <div class="view-head">
+      <div>
+        <h1 id="about-title">프로젝트 소개</h1>
+        <p class="view-sub">공개 의료 데이터셋을 활용한 개인 프로젝트 — 혈액 검사 데이터를 웹에서 분석하고 시각화합니다.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-3">
+      <article class="about-card">
+        <span class="kpi-icon kpi-blue"><i class="fa-solid fa-bullseye"></i></span>
+        <h2>왜 필요한가</h2>
+        <p>혈액 검사 데이터는 방대하지만, 이를 효율적으로 분석할 수 있는 도구가 부족합니다.</p>
+      </article>
+      <article class="about-card">
+        <span class="kpi-icon kpi-cyan"><i class="fa-solid fa-database"></i></span>
+        <h2>공개 데이터 활용</h2>
+        <p>UCI ML Repository, Kaggle 등 공개 의료 데이터셋으로 학습과 개발을 동시에 실현합니다.</p>
+      </article>
+      <article class="about-card">
+        <span class="kpi-icon kpi-violet"><i class="fa-solid fa-globe"></i></span>
+        <h2>웹 기반 접근성</h2>
+        <p>브라우저만 있으면 언제 어디서나 혈액 데이터 분석이 가능한 환경을 제공합니다.</p>
+      </article>
+    </div>
+
+    <article class="panel">
+      <header class="panel-head"><h2>프로젝트 목표</h2><p>세 가지 목표를 기준으로 기능을 설계했습니다.</p></header>
+      <ol class="goal-list">
+        <li><span class="goal-num">1</span><div><h3>혈액 분석 시스템 구축</h3><p>Open DataSet 기반으로 실질적인 혈액 분석 파이프라인을 설계하고 구현합니다.<br /><small>구현: 컬럼 자동 인식 → 정규화 → 기술 통계 → 이상치 탐지 → 시각화 파이프라인</small></p></div></li>
+        <li><span class="goal-num">2</span><div><h3>사용자 친화적 인터페이스</h3><p>누구나 쉽게 사용할 수 있는 직관적인 웹 UI/UX를 제공합니다.<br /><small>구현: 드래그 앤 드롭 업로드, 한글 라벨, 반응형 레이아웃, 키보드 접근성</small></p></div></li>
+        <li><span class="goal-num">3</span><div><h3>실시간 시각화</h3><p>분석 결과를 즉시 차트와 그래프로 확인할 수 있는 실시간 대시보드를 구현합니다.<br /><small>구현: Chart.js 기반 분포·상태·산점도·랭킹 차트, 필터 변경 즉시 재렌더링</small></p></div></li>
+      </ol>
+    </article>
+
+    <div class="grid grid-2">
+      <article class="panel">
+        <header class="panel-head"><h2>주요 기능</h2><p>요구사항 매핑</p></header>
+        <ul class="feature-list">
+          <li><i class="fa-solid fa-file-arrow-up"></i><div><strong>데이터 업로드 및 분석</strong><p>CSV · Excel · JSON 파일을 올리면 전처리 후 자동으로 분석이 시작됩니다.</p></div></li>
+          <li><i class="fa-solid fa-chart-line"></i><div><strong>통계 분석 및 이상치 탐지</strong><p>정상 범위 이탈, IQR, 다변량 거리 기반으로 비정상 수치를 감지·하이라이트합니다.</p></div></li>
+          <li><i class="fa-solid fa-clock-rotate-left"></i><div><strong>실시간 시각화</strong><p>필터와 임계값을 바꾸면 차트가 즉시 다시 그려집니다.</p></div></li>
+          <li><i class="fa-solid fa-box-archive"></i><div><strong>기록 보관</strong><p>분석 결과를 저장하고 다시 불러와 비교할 수 있습니다.</p></div></li>
+        </ul>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head"><h2>데이터 출처와 지표</h2><p>사용되는 공개 데이터셋과 참고 범위</p></header>
+        <div class="source-grid">
+          <div class="source-card"><h3>UCI ML Repository</h3><p>검증된 의료 데이터셋 (예: CKD, Statlog Heart 등)</p><a href="https://archive.ics.uci.edu/ml/index.php" target="_blank" rel="noopener noreferrer">archive.ics.uci.edu <i class="fa-solid fa-arrow-up-right-from-square"></i></a></div>
+          <div class="source-card"><h3>Kaggle</h3><p>다양한 혈액 분석 데이터 (Blood Donation, Anemia 등)</p><a href="https://www.kaggle.com/datasets" target="_blank" rel="noopener noreferrer">kaggle.com/datasets <i class="fa-solid fa-arrow-up-right-from-square"></i></a></div>
+        </div>
+        <h3 class="sub-heading">지원 지표 및 참고 범위</h3>
+        <div class="table-scroll">
+          <table class="data-table compact-table" id="reference-table">
+            <thead><tr><th scope="col">지표</th><th scope="col">코드</th><th scope="col">단위</th><th scope="col">일반 참고 범위</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="disclaimer"><i class="fa-solid fa-triangle-exclamation"></i> 본 앱은 학습·연구용 도구이며, 의학적 진단을 제공하지 않습니다. 참고 범위는 검사실·성별·연령에 따라 달라질 수 있습니다.</p>
+      </article>
+    </div>
+  </section>
+</main>
+
+<footer class="app-footer">
+  <p>HemoLab — Open DataSet 기반 혈액 분석 WebApp · 정적 사이트(HTML/CSS/JS) · 분석은 전부 브라우저에서 수행됩니다.</p>
+</footer>
+
+<div class="modal-backdrop" id="sample-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
+    <header class="modal-head">
+      <h2 id="modal-title">검체 상세</h2>
+      <button class="icon-btn" id="modal-close" type="button" aria-label="닫기"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+<script src="js/data.js"></script>
+<script src="js/analytics.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
