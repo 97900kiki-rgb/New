@@ -255,3 +255,9 @@ python3 -m http.server 8000
 
 - UCI Machine Learning Repository — <https://archive.ics.uci.edu/ml/index.php>
 - Kaggle Datasets — <https://www.kaggle.com/datasets>
+- ------   
+   
+<img width="1395" height="877" alt="image" src="https://github.com/user-attachments/assets/f844203f-8f24-42ae-8ba9-f639f1f22470" />
+
+   실행링크> https://webapp.kdt2025.com/#dashboard   
+   저장소> https://github.com/97900kiki-rgb/New
