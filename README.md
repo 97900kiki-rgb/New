@@ -238,7 +238,6 @@ python3 -m http.server 8000
 플랫폼의 **Publish 탭**에서 원클릭으로 배포할 수 있습니다.
 - 정적 파일(`index.html`, `css/`, `js/`)이 그대로 호스팅됩니다.
 - 테이블 스키마(`analysis_records`)는 배포 시 D1 데이터베이스로 프로비저닝됩니다.
-- (https://www.genspark.ai/api/code_sandbox_light_git/preview/86008725-9fd9-4588-9f9b-5f7c4cc7ceb0/index.html?canvas_history_id=ce78f775495a6bf5df2f242553c226c031bfefe7#dashboard)   
 
 ### 사용한 외부 라이브러리 (CDN)
 | 라이브러리 | 버전 | 용도 |
